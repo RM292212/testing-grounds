@@ -3,46 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>True-Sync Sensor Level</title>
+    <title>Precision Gyro Twin</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', monospace; }
-        canvas { display: block; }
-
-        /* UI OVERLAY */
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: monospace; }
         
-        .hud-panel { 
-            position: absolute; bottom: 20px; left: 20px; 
-            background: rgba(0,0,0,0.5); padding: 15px; border-left: 4px solid #00ffcc; 
-            backdrop-filter: blur(4px); color: #fff;
+        /* HUD */
+        #hud {
+            position: absolute; top: 20px; left: 20px;
+            color: #0f0; pointer-events: none; z-index: 10;
         }
-        .hud-row { display: flex; justify-content: space-between; width: 200px; margin-bottom: 5px; font-size: 13px; }
-        .val { font-weight: bold; color: #00ffcc; font-family: monospace; }
+        .stat { margin-bottom: 5px; font-size: 12px; text-shadow: 0 0 2px #0f0; }
+        .val { font-weight: bold; color: #fff; }
 
-        /* LEVEL VISUALIZER (2D OVERLAY) */
-        #level-ring {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            width: 60px; height: 60px; border: 2px solid rgba(255,255,255,0.2); border-radius: 50%;
-            background: rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center;
-        }
-        #level-bubble {
-            width: 10px; height: 10px; background: #00ffcc; border-radius: 50%;
-            box-shadow: 0 0 10px #00ffcc; transition: transform 0.1s;
-        }
-        .level-cross { position: absolute; background: rgba(255,255,255,0.1); }
-        
         /* CONTROLS */
-        .btn {
-            pointer-events: auto; background: #00ffcc; border: none; color: #000;
-            padding: 12px 24px; font-weight: bold; text-transform: uppercase; 
-            cursor: pointer; box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
-            font-size: 12px; border-radius: 4px;
+        #btn-tare {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            padding: 15px 40px; background: rgba(0, 255, 0, 0.2); border: 1px solid #0f0;
+            color: #0f0; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;
+            cursor: pointer; backdrop-filter: blur(5px); border-radius: 30px;
+            box-shadow: 0 0 15px rgba(0,255,0,0.1); pointer-events: auto;
         }
-        #btn-cal { position: absolute; top: 20px; right: 20px; background: transparent; border: 1px solid #00ffcc; color: #00ffcc; }
-        #btn-start { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; padding: 20px 40px; }
+        #btn-tare:active { background: #0f0; color: #000; transform: translateX(-50%) scale(0.95); }
 
+        /* START OVERLAY */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center;
+            z-index: 100;
+        }
+        #btn-init {
+            padding: 20px 50px; font-size: 18px; background: #0f0; border: none; font-weight: bold;
+            cursor: pointer; box-shadow: 0 0 30px #0f0;
+        }
     </style>
-    
+
     <!-- THREE.JS -->
     <script type="importmap">
       { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -50,190 +44,195 @@
 </head>
 <body>
 
-    <div id="ui">
-        <!-- 2D Level at Top -->
-        <div id="level-ring">
-            <div class="level-cross" style="width: 100%; height: 1px;"></div>
-            <div class="level-cross" style="height: 100%; width: 1px;"></div>
-            <div id="level-bubble"></div>
-        </div>
-
-        <button id="btn-cal" class="btn">⟲ Sync Position</button>
-
-        <div class="hud-panel">
-            <div style="margin-bottom:10px; color:#aaa; font-size:10px;">SENSOR TELEMETRY</div>
-            <div class="hud-row"><span>X (BETA)</span> <span id="val-x" class="val">0°</span></div>
-            <div class="hud-row"><span>Y (GAMMA)</span> <span id="val-y" class="val">0°</span></div>
-            <div class="hud-row"><span>Z (ALPHA)</span> <span id="val-z" class="val">0°</span></div>
-            <div class="hud-row" style="margin-top:10px; border-top:1px solid #444; padding-top:5px;">
-                <span>LEVEL</span> <span id="val-inc" class="val">0°</span>
-            </div>
-        </div>
-        
-        <button id="btn-start" class="btn">Connect Sensors</button>
+    <div id="overlay">
+        <button id="btn-init">ACTIVATE SENSOR TWIN</button>
     </div>
+
+    <div id="hud">
+        <div class="stat">HEADING (α): <span id="v-alpha" class="val">0</span></div>
+        <div class="stat">TILT F/B (β): <span id="v-beta" class="val">0</span></div>
+        <div class="stat">TILT L/R (γ): <span id="v-gamma" class="val">0</span></div>
+        <div class="stat" style="margin-top:10px; color:#888;">MODE: SMOOTHED (SLERP 0.1)</div>
+    </div>
+
+    <button id="btn-tare">⌖ CENTER HEADING</button>
 
     <script type="module">
         import * as THREE from 'three';
 
         // --- 1. SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a1a);
+        scene.background = new THREE.Color(0x121212);
         
-        // Isometric Camera Angle
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 20, 30);
-        camera.lookAt(0, 0, 0);
-
+        // Camera setup for "Portrait" view
+        // We look at the object from slightly above, but mostly front-on
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 25); 
+        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Lights
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-        scene.add(hemiLight);
-        const dirLight = new THREE.DirectionalLight(0x00ffcc, 2);
-        dirLight.position.set(5, 10, 7);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-
-        // --- 2. OBJECTS ---
+        // Lighting
+        const ambient = new THREE.AmbientLight(0x404040, 1.5);
+        scene.add(ambient);
         
-        // Floor Grid
-        const grid = new THREE.GridHelper(50, 50, 0x333333, 0x111111);
-        scene.add(grid);
+        const spot = new THREE.SpotLight(0xffffff, 500);
+        spot.position.set(5, 10, 10);
+        spot.angle = 0.5;
+        spot.penumbra = 1;
+        spot.castShadow = true;
+        scene.add(spot);
 
-        // Device Container (For pivoting)
-        const pivot = new THREE.Group();
-        scene.add(pivot);
+        const blueRim = new THREE.PointLight(0x0088ff, 5, 20);
+        blueRim.position.set(-10, 0, 5);
+        scene.add(blueRim);
 
-        // The Phone Model
-        const boxGeo = new THREE.BoxGeometry(9, 1, 18);
-        const matBody = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 });
-        const matScreen = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.8 });
+        // --- 2. THE "HIGH FIDELITY" PHONE MODEL ---
         
-        // Materials: Sides are body, Top is screen
-        const mats = [matBody, matBody, matScreen, matBody, matBody, matBody];
-        const phone = new THREE.Mesh(boxGeo, mats);
-        phone.castShadow = true;
-        pivot.add(phone);
+        const phoneGroup = new THREE.Group();
+        scene.add(phoneGroup);
 
-        // "Notch" Indicator (Top of phone)
+        // A. Body (Matte Black)
+        const bodyGeo = new THREE.BoxGeometry(7, 14, 0.8); // Typical 1:2 aspect ratio
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        
+        // B. Screen (Glossy Black/Glass)
+        const screenGeo = new THREE.PlaneGeometry(6.5, 13);
+        const screenMat = new THREE.MeshStandardMaterial({ 
+            color: 0x050505, roughness: 0.0, metalness: 0.1, 
+            emissive: 0x111111, emissiveIntensity: 0.2 
+        });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.z = 0.41; // Slightly above body
+        
+        // C. UI Elements (To help orientation)
+        // "Notch" / Camera
         const notch = new THREE.Mesh(
-            new THREE.BoxGeometry(3, 0.1, 0.5),
-            new THREE.MeshBasicMaterial({ color: 0x00ffcc })
+            new THREE.CircleGeometry(0.3, 32),
+            new THREE.MeshBasicMaterial({ color: 0x333333 })
         );
-        notch.position.set(0, 0.51, -8);
-        phone.add(notch);
-
-        // On-Screen Bubble Level (3D)
-        const bubbleGeo = new THREE.CircleGeometry(1.5, 32);
-        const bubbleMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.5 });
-        const bubble3D = new THREE.Mesh(bubbleGeo, bubbleMat);
-        bubble3D.rotation.x = -Math.PI / 2;
-        bubble3D.position.set(0, 0.52, 0);
-        phone.add(bubble3D);
-
-
-        // --- 3. SENSOR MATH (QUATERNIONS) ---
+        notch.position.set(0, 6, 0.42);
         
-        let deviceQ = new THREE.Quaternion(); // The raw sensor rotation
-        let calibrateQ = new THREE.Quaternion(); // The offset (sync)
-        let finalQ = new THREE.Quaternion(); // The result
-        
+        // "Home Bar"
+        const homeBar = new THREE.Mesh(
+            new THREE.PlaneGeometry(2, 0.1),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        homeBar.position.set(0, -6, 0.42);
+
+        // D. Edge Glow (Neon Strip)
+        const edgeGeo = new THREE.BoxGeometry(7.1, 14.1, 0.7);
+        const edgeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.1 });
+        const edge = new THREE.Mesh(edgeGeo, edgeMat);
+
+        body.add(screen);
+        body.add(notch);
+        body.add(homeBar);
+        body.add(edge);
+        phoneGroup.add(body);
+
+        // --- 3. MATH & PHYSICS (The Fix) ---
+
+        let targetQ = new THREE.Quaternion();
+        let currentQ = new THREE.Quaternion();
+        let offsetAlpha = 0; // The "Tare" value
+
         const euler = new THREE.Euler();
-        const zee = new THREE.Vector3(0, 0, 1);
         const degToRad = Math.PI / 180;
 
-        // Function to convert DeviceOrientation alpha/beta/gamma to Quaternion
-        // Source: Three.js DeviceOrientationControls Logic
-        function setObjectQuaternion(quaternion, alpha, beta, gamma, orient) {
-            euler.set(beta, alpha, -gamma, 'YXZ'); // Intrinsic rotation order for sensors
-            quaternion.setFromEuler(euler);
+        // SENSOR HANDLER
+        function handleOrientation(event) {
+            const { alpha, beta, gamma } = event;
             
-            // Adjust for screen orientation (Portrait/Landscape)
-            const orientQ = new THREE.Quaternion();
-            orientQ.setFromAxisAngle(zee, -orient);
-            quaternion.multiply(orientQ);
+            // UI Update
+            document.getElementById('v-alpha').innerText = (alpha || 0).toFixed(0);
+            document.getElementById('v-beta').innerText = (beta || 0).toFixed(0);
+            document.getElementById('v-gamma').innerText = (gamma || 0).toFixed(0);
+
+            if (alpha === null) return;
+
+            // --- THE ROTATION MAPPING FIX ---
+            // Device Orientation Data:
+            // Beta:  -180 to 180 (Front/Back Tilt) -> Rotation around X
+            // Gamma: -90 to 90   (Left/Right Tilt) -> Rotation around Y
+            // Alpha: 0 to 360    (Compass)         -> Rotation around Z
             
-            // Rotate -90 deg around X to align phone "flat" with Z-axis
-            const alignQ = new THREE.Quaternion();
-            alignQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-            quaternion.multiply(alignQ);
+            // We adjust Alpha by our "Tare" offset
+            const relativeAlpha = alpha - offsetAlpha;
+
+            // Convert to Radians
+            const x = beta * degToRad;
+            const y = gamma * degToRad;
+            const z = relativeAlpha * degToRad;
+
+            // Apply to Euler. Order 'ZXY' is critical for phones.
+            // We invert Z (Alpha) because WebGL rotation is counter-clockwise
+            euler.set(x, y, -z, 'ZXY'); 
+            
+            // Update Target Quaternion
+            targetQ.setFromEuler(euler);
+            
+            // ROTATION CORRECTION:
+            // The standard math assumes phone is flat on table.
+            // To match "Handheld" mode (Vertical), we don't rotate the mesh.
+            // We rely on the fact that Beta ~90 when held up.
+            // The camera is placed at Z=25, looking at (0,0,0).
+            // When you hold phone up, Beta=90.
+            // This rotates the mesh 90deg around X.
+            // The mesh (flat box) stands up. It faces the camera. 
+            // THIS IS CORRECT.
         }
 
-        // Calibration Handler
-        document.getElementById('btn-cal').addEventListener('click', () => {
-            // Create an inverse quaternion of the current state
-            // This sets the current position as "Zero" (Identity)
-            calibrateQ.copy(deviceQ).invert();
-        });
+        // --- 4. ANIMATION LOOP (With Smoothing) ---
 
-        // --- 4. EVENT LOOP ---
-
-        window.addEventListener('deviceorientation', (event) => {
-            // Capture Data
-            const alpha = event.alpha ? THREE.MathUtils.degToRad(event.alpha) : 0;
-            const beta = event.beta ? THREE.MathUtils.degToRad(event.beta) : 0;
-            const gamma = event.gamma ? THREE.MathUtils.degToRad(event.gamma) : 0;
-            const orient = window.orientation ? THREE.MathUtils.degToRad(window.orientation) : 0;
-
-            // 1. Update Raw Quaternion
-            setObjectQuaternion(deviceQ, alpha, beta, gamma, orient);
-
-            // 2. Apply Calibration
-            finalQ.multiplyQuaternions(calibrateQ, deviceQ);
-
-            // 3. Apply to 3D Object
-            pivot.setRotationFromQuaternion(finalQ);
-
-            // 4. Update HUD Data
-            document.getElementById('val-x').innerText = Math.round(event.beta) + "°";
-            document.getElementById('val-y').innerText = Math.round(event.gamma) + "°";
-            document.getElementById('val-z').innerText = Math.round(event.alpha) + "°";
-
-            // 5. Level Calculation (Inclination)
-            // Calculate total tilt from vertical (90deg) or flat
-            const tiltX = event.beta; // Front/Back
-            const tiltY = event.gamma; // Left/Right
-            
-            // Update 2D Bubble UI
-            // Map -45/45 degrees to -30/30 pixels
-            const xOffset = Math.max(-30, Math.min(30, tiltY)); 
-            const yOffset = Math.max(-30, Math.min(30, tiltX));
-            document.getElementById('level-bubble').style.transform = `translate(${xOffset}px, ${yOffset}px)`;
-
-            // Update 3D Bubble
-            // Slide the dot on the phone screen surface
-            bubble3D.position.x = -Math.max(-4, Math.min(4, tiltY / 10));
-            bubble3D.position.z = -Math.max(-8, Math.min(8, tiltX / 10));
-
-            // Total Angle from flat
-            const inclination = Math.sqrt(tiltX*tiltX + tiltY*tiltY);
-            document.getElementById('val-inc').innerText = inclination.toFixed(1) + "°";
-            document.getElementById('val-inc').style.color = inclination < 3 ? "#0f0" : "#fff";
-        });
-
-
-        // --- 5. INITIALIZATION ---
-        
         function animate() {
             requestAnimationFrame(animate);
+
+            // SLERP (Spherical Linear Interpolation)
+            // This moves 'currentQ' 10% of the way to 'targetQ' every frame.
+            // Result: Silky smooth movement, no jitter.
+            currentQ.slerp(targetQ, 0.15);
+            
+            phoneGroup.rotation.setFromQuaternion(currentQ);
+
             renderer.render(scene, camera);
         }
 
-        document.getElementById('btn-start').addEventListener('click', async () => {
-            // iOS Check
+        // --- 5. CONTROLS ---
+
+        // The "Center Heading" Button
+        document.getElementById('btn-tare').addEventListener('click', () => {
+            // We only reset Alpha (Compass). 
+            // We do NOT reset Beta/Gamma, because "Up" is physically real.
+            // If we reset tilt, the phone would look flat when it's actually vertical.
+            
+            const rawAlpha = parseFloat(document.getElementById('v-alpha').innerText);
+            offsetAlpha = rawAlpha; // Set current compass heading as "0"
+        });
+
+        // Init
+        document.getElementById('btn-init').addEventListener('click', async () => {
+            // Permissions
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 const perm = await DeviceOrientationEvent.requestPermission();
-                if (perm !== 'granted') alert('Permission needed for sync');
+                if(perm !== 'granted') return alert('Permission Denied');
             }
-            document.getElementById('btn-start').style.display = 'none';
+            
+            // Listeners
+            if ('ondeviceorientationabsolute' in window) {
+                window.addEventListener('deviceorientationabsolute', handleOrientation);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+            
+            document.getElementById('overlay').style.display = 'none';
             animate();
         });
         
-        // Resize Handler
+        // Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
