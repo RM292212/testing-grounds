@@ -3,235 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Omni-Sensor Fusion</title>
+    <title>OMNI-SENSOR V2</title>
     <style>
-        :root { --bg: #050505; --panel: #141414; --accent: #00ffcc; --warn: #ffaa00; --dim: #444; }
-        body { background: var(--bg); color: #eee; font-family: 'Segoe UI', 'Roboto', monospace; margin: 0; padding: 10px; overflow-x: hidden; }
-
-        /* GRID LAYOUT */
-        .dashboard { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
-        .full-width { grid-column: span 2; }
-
-        /* COMPONENT STYLES */
-        .card { background: var(--panel); border: 1px solid #333; border-radius: 8px; padding: 12px; position: relative; overflow: hidden; }
-        .card-header { font-size: 10px; text-transform: uppercase; color: #888; letter-spacing: 1px; margin-bottom: 8px; display: flex; justify-content: space-between; }
-        .live-tag { color: var(--accent); animation: pulse 1s infinite; }
+        :root { --bg: #000; --green: #0f0; --dim: #333; --text: #ccc; }
+        body { background: var(--bg); color: var(--text); font-family: monospace; margin: 0; padding: 15px; }
         
-        .val-big { font-size: 24px; font-weight: 300; color: #fff; }
-        .unit { font-size: 12px; color: #666; }
-        .sub-data { font-size: 11px; color: #aaa; margin-top: 4px; display: flex; justify-content: space-between; }
+        /* COMPASS UI */
+        .compass-ring { width: 200px; height: 200px; border: 2px solid #333; border-radius: 50%; margin: 20px auto; position: relative; background: radial-gradient(circle, #111 0%, #000 70%); box-shadow: 0 0 20px #111; }
+        .needle { width: 4px; height: 100px; background: red; position: absolute; top: 0; left: 50%; transform-origin: bottom center; transition: transform 0.1s cubic-bezier(0.2, 0, 0, 1); z-index: 2; }
+        .needle::after { content: ''; display: block; width: 4px; height: 100px; background: #fff; position: absolute; top: 100%; }
+        .tick { position: absolute; font-weight: bold; font-size: 14px; color: #555; }
+        .n { top: 5px; left: 50%; transform: translateX(-50%); color: red; }
+        .e { right: 10px; top: 50%; transform: translateY(-50%); }
+        .s { bottom: 5px; left: 50%; transform: translateX(-50%); }
+        .w { left: 10px; top: 50%; transform: translateY(-50%); }
 
-        /* RADAR VISUALIZER */
-        .radar-container { height: 180px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .radar-circle { width: 140px; height: 140px; border: 1px dashed #444; border-radius: 50%; position: relative; background: radial-gradient(circle, #111 0%, #000 70%); }
-        .radar-needle { width: 2px; height: 70px; background: linear-gradient(to top, transparent 0%, var(--accent) 100%); position: absolute; top: 0; left: 50%; transform-origin: bottom center; transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1); }
-        .compass-label { position: absolute; font-size: 10px; color: #666; font-weight: bold; }
-        .c-n { top: 5px; left: 50%; transform: translateX(-50%); color: var(--accent); }
-        .c-e { right: 5px; top: 50%; transform: translateY(-50%); }
-        .c-s { bottom: 5px; left: 50%; transform: translateX(-50%); }
-        .c-w { left: 5px; top: 50%; transform: translateY(-50%); }
+        /* DATA BOXES */
+        .panel { background: #111; border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+        .label { font-size: 10px; text-transform: uppercase; color: #666; display: block; margin-bottom: 5px; }
+        .value { font-size: 18px; color: var(--green); font-weight: bold; }
+        .err { color: #f00; font-size: 11px; }
 
-        /* LISTS */
-        .stat-row { border-bottom: 1px solid #222; padding: 6px 0; display: flex; justify-content: space-between; font-size: 12px; }
-        .stat-row:last-child { border-bottom: none; }
-        .stat-val { font-weight: bold; color: var(--accent); }
-
-        /* CONTROLS */
-        button { width: 100%; padding: 15px; background: var(--accent); color: #000; border: none; font-weight: bold; font-size: 14px; text-transform: uppercase; border-radius: 4px; margin-bottom: 15px; cursor: pointer; }
-        
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        /* BUTTONS */
+        button { width: 100%; padding: 15px; background: #222; color: #fff; border: 1px solid #555; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:active { background: #333; }
     </style>
 </head>
 <body>
 
-    <button id="btn-init" onclick="initFusion()">Activate Sensor Fusion</button>
-
-    <div class="dashboard">
-        
-        <!-- 1. MAGNETOMETER / ORIENTATION -->
-        <div class="card full-width">
-            <div class="card-header">
-                <span>Magnetometer (Fusion)</span>
-                <span class="live-tag">● LIVE</span>
-            </div>
-            <div class="radar-container">
-                <div class="radar-circle">
-                    <span class="compass-label c-n">N</span>
-                    <span class="compass-label c-e">E</span>
-                    <span class="compass-label c-s">S</span>
-                    <span class="compass-label c-w">W</span>
-                    <div id="needle" class="radar-needle"></div>
-                </div>
-            </div>
-            <div style="text-align:center; margin-top:10px;">
-                <span id="heading-val" class="val-big">0</span><span class="unit">° HEADING</span>
-            </div>
+    <!-- 1. COMPASS SECTION -->
+    <div class="panel" style="text-align:center;">
+        <span class="label">TRUE NORTH COMPASS</span>
+        <div class="compass-ring">
+            <span class="tick n">N</span><span class="tick e">E</span>
+            <span class="tick s">S</span><span class="tick w">W</span>
+            <div id="needle" class="needle"></div>
         </div>
-
-        <!-- 2. ACCELEROMETER -->
-        <div class="card">
-            <div class="card-header">Accelerometer</div>
-            <div class="stat-row"><span>X</span> <span id="ax" class="stat-val">0.00</span></div>
-            <div class="stat-row"><span>Y</span> <span id="ay" class="stat-val">0.00</span></div>
-            <div class="stat-row"><span>Z</span> <span id="az" class="stat-val">0.00</span></div>
-            <div class="sub-data">Force (m/s²)</div>
-        </div>
-
-        <!-- 3. GYROSCOPE -->
-        <div class="card">
-            <div class="card-header">Gyroscope</div>
-            <div class="stat-row"><span>X</span> <span id="gx" class="stat-val">0.00</span></div>
-            <div class="stat-row"><span>Y</span> <span id="gy" class="stat-val">0.00</span></div>
-            <div class="stat-row"><span>Z</span> <span id="gz" class="stat-val">0.00</span></div>
-            <div class="sub-data">Rotation (rad/s)</div>
-        </div>
-
-        <!-- 4. ENVIRONMENT (Light/Proximity) -->
-        <div class="card full-width">
-            <div class="card-header">Environment</div>
-            <div class="stat-row">
-                <span>Ambient Light</span> 
-                <span id="lux-val" class="stat-val" style="color:#fff">--</span>
-            </div>
-             <div class="stat-row">
-                <span>Proximity</span> 
-                <span id="prox-val" class="stat-val" style="color:#fff">--</span>
-            </div>
-            <div style="font-size:10px; color:#666; margin-top:5px;">*Requires 'Generic Sensor' flags on Chrome</div>
-        </div>
-
-        <!-- 5. SYSTEM VITALS -->
-        <div class="card full-width">
-            <div class="card-header">Device Vitals</div>
-            <div class="stat-row"><span>Battery</span> <span id="bat-lvl" class="stat-val">--%</span></div>
-            <div class="stat-row"><span>Status</span> <span id="bat-state" class="stat-val">--</span></div>
-            <div class="stat-row"><span>Network</span> <span id="net-type" class="stat-val">--</span></div>
-            <div class="stat-row"><span>Cores/RAM</span> <span id="hw-conc" class="stat-val">--</span></div>
-        </div>
-
+        <div id="heading-display" class="value">0°</div>
+        <div id="compass-mode" style="font-size:10px; color:#666; margin-top:5px;">WAITING...</div>
     </div>
 
+    <!-- 2. SENSOR DEBUGGER -->
+    <div class="panel">
+        <span class="label">AMBIENT LIGHT (LUX)</span>
+        <div id="lux-val" class="value">--</div>
+        <div id="lux-stat" class="err">Status: Idle</div>
+    </div>
+
+    <div class="panel">
+        <span class="label">PROXIMITY (CM)</span>
+        <div id="prox-val" class="value">--</div>
+        <div id="prox-stat" class="err">Status: Idle</div>
+    </div>
+
+    <button onclick="startSensors()">ACTIVATE SENSORS</button>
+    <div id="log" style="font-size:10px; color:#555; margin-top:20px; height:100px; overflow-y:scroll; border-top:1px solid #333;"></div>
+
     <script>
-        // UI REFERENCES
         const ui = {
-            ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
-            gx: document.getElementById('gx'), gy: document.getElementById('gy'), gz: document.getElementById('gz'),
-            heading: document.getElementById('heading-val'), needle: document.getElementById('needle'),
-            lux: document.getElementById('lux-val'), prox: document.getElementById('prox-val'),
-            batLvl: document.getElementById('bat-lvl'), batState: document.getElementById('bat-state'),
-            net: document.getElementById('net-type'), hw: document.getElementById('hw-conc')
+            head: document.getElementById('heading-display'),
+            needle: document.getElementById('needle'),
+            mode: document.getElementById('compass-mode'),
+            lux: document.getElementById('lux-val'),
+            luxStat: document.getElementById('lux-stat'),
+            prox: document.getElementById('prox-val'),
+            proxStat: document.getElementById('prox-stat'),
+            log: document.getElementById('log')
         };
 
-        async function initFusion() {
-            document.getElementById('btn-init').style.display = 'none';
+        function log(msg) { ui.log.innerHTML = `> ${msg}<br>` + ui.log.innerHTML; }
 
-            // 1. REQUEST PERMISSIONS (iOS 13+ Requirement)
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                try { await DeviceMotionEvent.requestPermission(); } catch (e) { console.log(e); }
-            }
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { await DeviceOrientationEvent.requestPermission(); } catch (e) { console.log(e); }
+        // --- 1. THE COMPASS FIX (Absolute vs Relative) ---
+        function handleOrientation(event) {
+            let heading = null;
+            let mode = "Unknown";
+
+            // CASE A: iOS (Webkit) - True North is native
+            if (event.webkitCompassHeading) {
+                heading = event.webkitCompassHeading;
+                mode = "iOS Absolute (True North)";
+            } 
+            // CASE B: Android Chrome - Needs 'deviceorientationabsolute'
+            // We handle this in a separate event listener below
+            else if (event.absolute === true && event.alpha !== null) {
+                // Standard Absolute (Rarely works on Chrome without the specific event)
+                heading = 360 - event.alpha; 
+                mode = "Android Absolute";
+            } 
+            // CASE C: Relative (Fallback)
+            else if (event.alpha !== null) {
+                heading = 360 - event.alpha; // Invert rotation
+                mode = "Relative (Uncalibrated)";
             }
 
-            startMotionSensors();
-            startEnvSensors();
-            readSystemVitals();
+            if (heading !== null) {
+                // Normalize to 0-360
+                if (heading < 0) heading += 360;
+                heading = heading % 360;
+
+                ui.head.innerText = heading.toFixed(0) + "°";
+                ui.mode.innerText = mode;
+                
+                // Rotate the needle (Visual is inverted relative to phone)
+                ui.needle.style.transform = `translateX(-50%) rotate(${-heading}deg)`;
+            }
         }
 
-        // --- A. MOTION & ORIENTATION (The Reliable Stack) ---
-        function startMotionSensors() {
-            // 1. Orientation (Compass/Radar)
-            window.addEventListener('deviceorientation', (event) => {
-                // alpha: 0-360 (Compass), beta: front/back, gamma: left/right
-                if (event.alpha !== null) {
-                    const heading = Math.round(event.alpha);
-                    ui.heading.innerText = heading;
-                    // Rotate needle (Invert rotation to match compass behavior)
-                    ui.needle.style.transform = `translateX(-50%) rotate(${heading}deg)`;
-                }
-            });
+        // --- 2. SENSOR ACTIVATION ---
+        async function startSensors() {
+            log("Initializing...");
 
-            // 2. Acceleration (Motion)
-            window.addEventListener('devicemotion', (event) => {
-                const acc = event.accelerationIncludingGravity;
-                const rot = event.rotationRate;
+            // A. COMPASS: Try the "Absolute" event first (Chrome Android specific)
+            if ('ondeviceorientationabsolute' in window) {
+                window.addEventListener('deviceorientationabsolute', (e) => {
+                    const heading = 360 - e.alpha;
+                    ui.head.innerText = heading.toFixed(0) + "°";
+                    ui.mode.innerText = "Chrome Absolute (True North)";
+                    ui.needle.style.transform = `translateX(-50%) rotate(${-heading}deg)`;
+                });
+                log("Bound: deviceorientationabsolute");
+            } else {
+                // Fallback for iOS / Others
+                window.addEventListener('deviceorientation', handleOrientation);
+                log("Bound: deviceorientation (Standard)");
+            }
 
-                if (acc) {
-                    ui.ax.innerText = (acc.x || 0).toFixed(1);
-                    ui.ay.innerText = (acc.y || 0).toFixed(1);
-                    ui.az.innerText = (acc.z || 0).toFixed(1);
-                }
-                if (rot) {
-                    ui.gx.innerText = (rot.alpha || 0).toFixed(1);
-                    ui.gy.innerText = (rot.beta || 0).toFixed(1);
-                    ui.gz.innerText = (rot.gamma || 0).toFixed(1);
-                }
-            });
-        }
+            // Permissions for iOS 13+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                await DeviceOrientationEvent.requestPermission();
+            }
 
-        // --- B. ENVIRONMENT (The Experimental Stack) ---
-        function startEnvSensors() {
-            // 1. Ambient Light Sensor
+            // B. LIGHT SENSOR (The "Hard" Try)
             if ('AmbientLightSensor' in window) {
                 try {
                     const sensor = new AmbientLightSensor();
                     sensor.addEventListener('reading', () => {
-                        ui.lux.innerText = sensor.illuminance + " lux";
+                        ui.lux.innerText = sensor.illuminance + " lx";
+                        ui.luxStat.innerText = "Active";
+                        ui.luxStat.style.color = "#0f0";
                     });
-                    sensor.addEventListener('error', (e) => { ui.lux.innerText = "Blocked"; });
+                    sensor.addEventListener('error', (e) => {
+                        ui.luxStat.innerText = `Blocked: ${e.error.name}`;
+                        log(`Lux Error: ${e.error.name} (Enable Flags!)`);
+                    });
                     sensor.start();
-                } catch (err) { ui.lux.innerText = "Not Supported"; }
+                } catch (err) {
+                    ui.luxStat.innerText = "SecurityError (Flag Required)";
+                }
             } else {
-                ui.lux.innerText = "N/A (Browser)";
+                ui.luxStat.innerText = "Not Supported by Browser";
             }
 
-            // 2. Absolute Orientation (Magnetometer Fusion)
-            // This provides cleaner compass data than deviceorientation if available
-            if ('AbsoluteOrientationSensor' in window) {
+            // C. PROXIMITY SENSOR
+            if ('ProximitySensor' in window) {
                 try {
-                    const sensor = new AbsoluteOrientationSensor({ frequency: 60 });
-                    sensor.addEventListener('reading', () => {
-                        // Quaternion to Euler conversion (simplified for compass)
-                        // This is complex math, but we fall back to deviceorientation if this fails
+                    const prox = new ProximitySensor();
+                    prox.addEventListener('reading', () => {
+                        ui.prox.innerText = prox.distance + " cm";
+                        ui.proxStat.innerText = prox.near ? "NEAR" : "FAR";
                     });
-                    sensor.start();
-                } catch (e) { console.log("Adv Sensor Blocked"); }
+                    prox.addEventListener('error', (e) => {
+                        ui.proxStat.innerText = `Blocked: ${e.error.name}`;
+                    });
+                    prox.start();
+                } catch (err) {
+                    ui.proxStat.innerText = "SecurityError (Flag Required)";
+                }
+            } else {
+                ui.proxStat.innerText = "Not Supported by Browser";
             }
         }
-
-        // --- C. SYSTEM VITALS (The Context Stack) ---
-        async function readSystemVitals() {
-            // 1. Battery API
-            if ('getBattery' in navigator) {
-                try {
-                    const bat = await navigator.getBattery();
-                    const updateBat = () => {
-                        ui.batLvl.innerText = Math.round(bat.level * 100) + "%";
-                        ui.batState.innerText = bat.charging ? "CHARGING ⚡" : "DISCHARGING";
-                        if(bat.charging) ui.batState.style.color = "#0f0";
-                        else ui.batState.style.color = "#aaa";
-                    };
-                    updateBat();
-                    bat.addEventListener('levelchange', updateBat);
-                    bat.addEventListener('chargingchange', updateBat);
-                } catch (e) { ui.batLvl.innerText = "Blocked"; }
-            }
-
-            // 2. Network Info
-            if ('connection' in navigator) {
-                const conn = navigator.connection;
-                const updateNet = () => {
-                    ui.net.innerText = (conn.effectiveType || "unknown").toUpperCase();
-                    if (conn.saveData) ui.net.innerText += " (Data Saver)";
-                };
-                updateNet();
-                conn.addEventListener('change', updateNet);
-            }
-
-            // 3. Hardware Concurrency (Cores)
-            ui.hw.innerText = (navigator.hardwareConcurrency || "?") + " Cores / " + (navigator.deviceMemory || "?") + "GB RAM";
-        }
-
     </script>
 </body>
 </html>
