@@ -1,107 +1,466 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Precision Gyro Twin — Fixed</title>
-  <style>
-    body { margin:0; overflow:hidden; background:#0e0f12; color:#eee; font-family:sans-serif; }
-    #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
-    button{padding:12px 18px;border-radius:20px;border:none;background:#52ffa8;color:#000;font-weight:bold;cursor:pointer}
-  </style>
-  <script type="importmap">
-    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-  </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Precision Gyro Twin — Fusion</title>
+<style>
+  :root {
+    --bg:#0e0f12;
+    --panel:rgba(20,24,31,.72);
+    --text:#eef3fb;
+    --muted:#8b95a7;
+    --accent:#52ffa8;
+    --accent2:#6da7ff;
+    --warn:#ffd36d;
+    --danger:#ff6d8a;
+  }
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at top,#171b23 0%,var(--bg) 58%,#07080a 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);touch-action:none}
+  canvas{display:block}
+  #overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:radial-gradient(circle at center,rgba(20,24,31,.88),rgba(0,0,0,.97))}
+  #card{width:min(620px,calc(100vw - 32px));padding:24px;border-radius:24px;background:rgba(18,22,28,.85);border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 60px rgba(0,0,0,.42);text-align:center}
+  #card h1{margin:0 0 10px;font-size:20px}
+  #card p{margin:0 0 18px;color:var(--muted);font-size:14px;line-height:1.5}
+  button{padding:12px 18px;border:none;border-radius:999px;font-weight:800;cursor:pointer;color:#04140b;background:rgba(82,255,168,.95);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  button.secondary{background:rgba(255,255,255,.08);color:var(--text);border:1px solid rgba(255,255,255,.12)}
+  button.danger{background:rgba(255,109,138,.15);color:#ff9cad;border:1px solid rgba(255,109,138,.25)}
+  #hud{position:absolute;top:16px;left:16px;z-index:10;display:grid;gap:8px;min-width:290px;padding:14px;border-radius:18px;background:var(--panel);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(12px);box-shadow:0 10px 35px rgba(0,0,0,.35);font-size:12px;line-height:1.35}
+  .row{display:flex;justify-content:space-between;gap:16px}
+  .label{color:var(--muted)}
+  .value{font-variant-numeric:tabular-nums;font-weight:800}
+  .accent{color:var(--accent)}
+  .blue{color:var(--accent2)}
+  .warn{color:var(--warn)}
+  #controls{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:10;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  #compassWrap{position:absolute;top:16px;right:16px;z-index:10;width:140px;height:140px;border-radius:50%;background:rgba(20,24,31,.72);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(12px);box-shadow:0 10px 35px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+  #compass{position:relative;width:112px;height:112px;border-radius:50%;border:1px solid rgba(255,255,255,.14)}
+  #compass::before{content:'';position:absolute;inset:8px;border-radius:50%;border:1px dashed rgba(255,255,255,.08)}
+  .tick{position:absolute;left:50%;top:50%;width:2px;height:8px;background:rgba(255,255,255,.35);transform-origin:center 46px}
+  .tick.n{height:14px;background:rgba(255,211,109,.9)}
+  .labelN{position:absolute;left:50%;top:6px;transform:translateX(-50%);font-weight:900;color:var(--warn);font-size:12px;letter-spacing:.08em}
+  #needle{position:absolute;left:50%;top:50%;width:2px;height:42px;background:linear-gradient(to top,var(--danger),#fff);transform-origin:bottom center;transform:translate(-50%,-100%) rotate(0deg);border-radius:2px;box-shadow:0 0 12px rgba(255,109,138,.25)}
+  #needle::after{content:'';position:absolute;left:50%;top:-8px;transform:translateX(-50%);width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:10px solid var(--danger)}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.45}
+</style>
+<script type="importmap">
+  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 </head>
 <body>
 
 <div id="overlay">
-  <button id="start">START</button>
+  <div id="card">
+    <h1>Activate Sensor Fusion Twin</h1>
+    <p>
+      Uses gyro integration, gravity correction, and heading correction with damping and spike limits,
+      so the 3D phone behaves more like a real device and less like a noisy math demo.
+    </p>
+    <button id="start">START</button>
+    <div class="hint">Best results come from moving the phone slowly for calibration after start.</div>
+  </div>
+</div>
+
+<div id="hud">
+  <div class="row"><span class="label">RAW α / β / γ</span><span class="value" id="rawEuler">0 / 0 / 0</span></div>
+  <div class="row"><span class="label">GYRO RATE</span><span class="value blue" id="gyroRate">0°/s</span></div>
+  <div class="row"><span class="label">PITCH / ROLL / YAW</span><span class="value accent" id="fusedEuler">0 / 0 / 0</span></div>
+  <div class="row"><span class="label">HEADING</span><span class="value warn" id="headingText">0°</span></div>
+  <div class="row"><span class="label">HEADING SOURCE</span><span class="value" id="headingSource">—</span></div>
+  <div class="row"><span class="label">MODE</span><span class="value">FUSION + CLAMPING</span></div>
+</div>
+
+<div id="compassWrap">
+  <div id="compass">
+    <div class="labelN">N</div>
+    <div class="tick n" style="transform:translate(-50%,-50%) rotate(0deg)"></div>
+    <div class="tick" style="transform:translate(-50%,-50%) rotate(90deg)"></div>
+    <div class="tick" style="transform:translate(-50%,-50%) rotate(180deg)"></div>
+    <div class="tick" style="transform:translate(-50%,-50%) rotate(270deg)"></div>
+    <div id="needle"></div>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="centerHeading">CENTER HEADING</button>
+  <button id="recenterPose" class="secondary">REBASE POSE</button>
+  <button id="toggleNorth" class="danger">NORTH LOCK: ON</button>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
 
+// -----------------------------
 // Scene
+// -----------------------------
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0,0,20);
+scene.background = new THREE.Color(0x0e0f12);
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 0, 24);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff,1));
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.1);
+keyLight.position.set(8, 12, 10);
+scene.add(keyLight);
+const rimLight = new THREE.PointLight(0x6da7ff, 2.4, 60);
+rimLight.position.set(-12, 4, 12);
+scene.add(rimLight);
+const accentLight = new THREE.PointLight(0x52ffa8, 1.6, 60);
+accentLight.position.set(10, -2, 14);
+scene.add(accentLight);
 
+const grid = new THREE.GridHelper(60, 60, 0x233041, 0x18202c);
+grid.position.y = -13;
+scene.add(grid);
+
+// -----------------------------
 // Model
+// -----------------------------
 const phone = new THREE.Group();
 scene.add(phone);
 
 const body = new THREE.Mesh(
-  new THREE.BoxGeometry(7,14,1),
-  new THREE.MeshStandardMaterial({color:0x222222})
+  new THREE.BoxGeometry(7, 14, 0.95),
+  new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.28, metalness: 0.92 })
 );
 phone.add(body);
 
-// ✅ FIX: Removed invalid RoundedBoxGeometry usage
-function createNotch() {
-  return new THREE.Mesh(
-    new THREE.BoxGeometry(1.6,0.3,0.1),
-    new THREE.MeshBasicMaterial({color:0x333333})
-  );
-}
+const bezel = new THREE.Mesh(
+  new THREE.BoxGeometry(7.15, 14.15, 1.02),
+  new THREE.MeshStandardMaterial({ color: 0x090a0c, roughness: 0.5, metalness: 0.65, transparent: true, opacity: 0.92 })
+);
+bezel.position.z = -0.02;
+phone.add(bezel);
 
-const notch = createNotch();
-notch.position.set(0,6,0.6);
+const screen = new THREE.Mesh(
+  new THREE.PlaneGeometry(6.58, 13.1),
+  new THREE.MeshStandardMaterial({ color: 0x050607, roughness: 0.02, metalness: 0.12, emissive: 0x11202e, emissiveIntensity: 0.16 })
+);
+screen.position.z = 0.49;
+phone.add(screen);
+
+const notch = new THREE.Mesh(
+  new THREE.BoxGeometry(1.65, 0.28, 0.08),
+  new THREE.MeshBasicMaterial({ color: 0x2d3138 })
+);
+notch.position.set(0, 6.18, 0.56);
 phone.add(notch);
 
-// Orientation
-const euler = new THREE.Euler();
-const targetQ = new THREE.Quaternion();
-const currentQ = new THREE.Quaternion();
+const homeBar = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.9, 0.085),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+);
+homeBar.position.set(0, -6.2, 0.56);
+phone.add(homeBar);
 
-function handleOrientation(e){
-  if(e.alpha == null) return;
+const glow = new THREE.Mesh(
+  new THREE.BoxGeometry(7.08, 14.08, 0.9),
+  new THREE.MeshBasicMaterial({ color: 0x52ffa8, wireframe: true, transparent: true, opacity: 0.05 })
+);
+phone.add(glow);
 
-  const alpha = THREE.MathUtils.degToRad(e.alpha);
-  const beta = THREE.MathUtils.degToRad(e.beta);
-  const gamma = THREE.MathUtils.degToRad(e.gamma);
+// -----------------------------
+// Fusion state
+// -----------------------------
+const DEG2RAD = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
+const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+const qCurrent = new THREE.Quaternion();
+const qTarget = new THREE.Quaternion();
+const qFromGyro = new THREE.Quaternion();
+const qGravity = new THREE.Quaternion();
+const qHeading = new THREE.Quaternion();
+const qScreen = new THREE.Quaternion();
+const qWorldFix = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2); // three.js device orientation world fix
+const vUp = new THREE.Vector3(0, 1, 0);
+const vForward = new THREE.Vector3(0, 0, 1);
+const vGravity = new THREE.Vector3();
+const vTemp = new THREE.Vector3();
+const m4 = new THREE.Matrix4();
+const clock = new THREE.Clock();
 
-  euler.set(beta, alpha, -gamma, 'YXZ');
-  targetQ.setFromEuler(euler);
+let started = false;
+let northLock = true;
+let headingOffsetDeg = 0;
+let lastHeadingDeg = 0;
+let lastHeadingSource = '—';
+let latestRaw = { alpha: 0, beta: 0, gamma: 0 };
+let latestGyro = { alpha: 0, beta: 0, gamma: 0 };
+let latestMotion = null;
+
+// Low-pass state for gravity-like vector.
+const gravityLP = new THREE.Vector3(0, 1, 0);
+
+// Limits to keep simulation physically sane.
+const MAX_DEG_PER_SEC = 540;
+const MAX_SENSOR_DELTA_DEG = 35;
+const MAX_ROLL_DEG = 89.4;
+const MAX_PITCH_DEG = 89.4;
+const FUSION_GYRO_WEIGHT = 0.985;
+const GYRO_DRIFT_CORRECTION = 0.015;
+const HEADING_CORRECTION = 0.08;
+const GRAVITY_CORRECTION = 0.08;
+
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, v));
 }
 
-function animate(){
-  requestAnimationFrame(animate);
-  currentQ.slerp(targetQ,0.15);
-  phone.quaternion.copy(currentQ);
-  renderer.render(scene,camera);
+function wrap360(deg) {
+  return ((deg % 360) + 360) % 360;
 }
 
-// Start
-start.onclick = async ()=>{
-  if(typeof DeviceOrientationEvent.requestPermission === 'function'){
-    const p = await DeviceOrientationEvent.requestPermission();
-    if(p !== 'granted') return;
+function shortestAngleDeg(a, b) {
+  return ((((a - b) % 360) + 540) % 360) - 180;
+}
+
+function safeAngleDeltaDeg(next, prev) {
+  return clamp(shortestAngleDeg(next, prev), -MAX_SENSOR_DELTA_DEG, MAX_SENSOR_DELTA_DEG);
+}
+
+function getScreenAngleDeg() {
+  return window.screen?.orientation?.angle ?? window.orientation ?? 0;
+}
+
+function getHeadingDeg(e) {
+  if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) {
+    lastHeadingSource = 'webkitCompassHeading';
+    return wrap360(e.webkitCompassHeading);
+  }
+  if (typeof e.alpha === 'number') {
+    lastHeadingSource = e.absolute ? 'absolute alpha' : 'relative alpha';
+    return wrap360(e.alpha);
+  }
+  lastHeadingSource = 'unavailable';
+  return null;
+}
+
+function quaternionFromDeviceEuler(alphaDeg, betaDeg, gammaDeg, screenDeg) {
+  // Use the standard device orientation order, then apply world/screen correction.
+  euler.set(betaDeg * DEG2RAD, alphaDeg * DEG2RAD, -gammaDeg * DEG2RAD, 'YXZ');
+  qTarget.setFromEuler(euler);
+  qTarget.multiply(qWorldFix);
+  qScreen.setFromAxisAngle(vForward, -screenDeg * DEG2RAD);
+  qTarget.multiply(qScreen);
+  return qTarget;
+}
+
+function quaternionFromGravity(gravityVec) {
+  // Align device up with world up using a stable shortest-arc rotation.
+  const g = gravityVec.clone().normalize();
+  if (g.lengthSq() < 1e-6) return null;
+
+  // We want device "up" to oppose gravity.
+  const deviceUp = g.clone().multiplyScalar(-1);
+  qGravity.setFromUnitVectors(vUp, deviceUp);
+  return qGravity;
+}
+
+function maybeApplyHeadingCorrection(headingDeg, screenDeg) {
+  if (headingDeg == null) return;
+  const fusedHeading = wrap360(headingDeg + headingOffsetDeg);
+
+  // Compute the current yaw from the quaternion, correct only the heading component.
+  const yAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(qCurrent);
+  const projectedForward = new THREE.Vector3(0, 0, 1).applyQuaternion(qCurrent);
+  projectedForward.y = 0;
+  if (projectedForward.lengthSq() < 1e-6) return;
+  projectedForward.normalize();
+
+  const worldNorth = new THREE.Vector3(
+    Math.sin(fusedHeading * DEG2RAD),
+    0,
+    Math.cos(fusedHeading * DEG2RAD)
+  );
+
+  let yawError = Math.atan2(
+    worldNorth.x * projectedForward.z - worldNorth.z * projectedForward.x,
+    worldNorth.x * projectedForward.x + worldNorth.z * projectedForward.z
+  );
+
+  // Keep correction gentle so it does not snap on noisy compasses.
+  yawError = clamp(yawError, -0.25, 0.25);
+  qHeading.setFromAxisAngle(yAxis.lengthSq() > 0 ? yAxis.normalize() : new THREE.Vector3(0, 1, 0), yawError * HEADING_CORRECTION);
+  qCurrent.premultiply(qHeading);
+}
+
+function updateCompass(headingDeg) {
+  const needle = document.getElementById('needle');
+  const display = headingDeg == null ? 0 : wrap360(headingDeg + headingOffsetDeg);
+  needle.style.transform = `translate(-50%, -100%) rotate(${display}deg)`;
+  document.getElementById('headingText').textContent = `${display.toFixed(1)}°`;
+}
+
+function updateHud() {
+  document.getElementById('rawEuler').textContent = `${Math.round(latestRaw.alpha)} / ${Math.round(latestRaw.beta)} / ${Math.round(latestRaw.gamma)}`;
+  document.getElementById('gyroRate').textContent = `${Math.round(Math.max(Math.abs(latestGyro.alpha), Math.abs(latestGyro.beta), Math.abs(latestGyro.gamma)))}°/s`;
+  const pe = new THREE.Euler().setFromQuaternion(qCurrent, 'YXZ');
+  document.getElementById('fusedEuler').textContent = `${pe.x * RAD2DEG.toFixed ? '' : ''}`;
+
+  const pitch = THREE.MathUtils.radToDeg(pe.x);
+  const yaw = wrap360(THREE.MathUtils.radToDeg(pe.y));
+  const roll = THREE.MathUtils.radToDeg(pe.z);
+  document.getElementById('fusedEuler').textContent = `${pitch.toFixed(1)} / ${roll.toFixed(1)} / ${yaw.toFixed(1)}`;
+  document.getElementById('headingSource').textContent = lastHeadingSource;
+}
+
+function lowPassGravity(vec, alpha = 0.12) {
+  gravityLP.lerp(vec, alpha);
+  if (gravityLP.lengthSq() < 1e-6) gravityLP.set(0, 1, 0);
+  return gravityLP.clone();
+}
+
+function onDeviceMotion(e) {
+  latestMotion = e;
+}
+
+function onDeviceOrientation(e) {
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+
+  latestRaw = { alpha: e.alpha, beta: e.beta, gamma: e.gamma };
+
+  const screenDeg = getScreenAngleDeg();
+  const headingDeg = getHeadingDeg(e);
+  lastHeadingDeg = headingDeg ?? lastHeadingDeg;
+
+  // Base orientation from the browser orientation event.
+  // This remains useful even when motion APIs are noisy or unavailable.
+  const nextQ = quaternionFromDeviceEuler(e.alpha, e.beta, e.gamma, screenDeg);
+
+  // Pull the new orientation toward the current state to suppress spikes.
+  qCurrent.slerp(nextQ, 0.22);
+
+  // Gravity correction from devicemotion: this stabilizes the level/tilt feel.
+  if (latestMotion) {
+    const g = latestMotion.accelerationIncludingGravity;
+    if (g && [g.x, g.y, g.z].every(v => typeof v === 'number' && Number.isFinite(v))) {
+      const gravityVec = new THREE.Vector3(g.x, g.y, g.z);
+      const smoothed = lowPassGravity(gravityVec, 0.18);
+      const qG = quaternionFromGravity(smoothed);
+      if (qG) {
+        // Blend in gravity correction very gently to avoid fighting fast motion.
+        qCurrent.slerp(qG, GRAVITY_CORRECTION);
+      }
+    }
+
+    const rr = latestMotion.rotationRate;
+    if (rr && [rr.alpha, rr.beta, rr.gamma].every(v => typeof v === 'number' && Number.isFinite(v))) {
+      latestGyro = { alpha: rr.alpha, beta: rr.beta, gamma: rr.gamma };
+
+      // Clamp angular speed to prevent crazy spikes from making the model explode.
+      const dt = Math.max(clock.getDelta(), 1 / 120);
+      const maxStep = MAX_DEG_PER_SEC * dt;
+      const ax = THREE.MathUtils.degToRad(clamp(rr.beta, -MAX_DEG_PER_SEC, MAX_DEG_PER_SEC) * dt);
+      const ay = THREE.MathUtils.degToRad(clamp(rr.alpha, -MAX_DEG_PER_SEC, MAX_DEG_PER_SEC) * dt);
+      const az = THREE.MathUtils.degToRad(clamp(rr.gamma, -MAX_DEG_PER_SEC, MAX_DEG_PER_SEC) * dt);
+
+      // Small gyro integration step.
+      const dq = new THREE.Quaternion().setFromEuler(new THREE.Euler(ax, ay, az, 'XYZ'));
+      qCurrent.multiply(dq).normalize();
+
+      // Keep the gyro from drifting forever when motion slows.
+      qCurrent.slerp(nextQ, GYRO_DRIFT_CORRECTION);
+    }
   }
 
-  window.addEventListener('deviceorientation', handleOrientation);
-  overlay.style.display='none';
-  animate();
-};
+  // Gentle heading correction toward north.
+  if (northLock) {
+    maybeApplyHeadingCorrection(headingDeg, screenDeg);
+  }
 
-// Resize
-addEventListener('resize', ()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  // Physical plausibility clamp: prevent impossible tilt from dominating the display.
+  const fusedEuler = new THREE.Euler().setFromQuaternion(qCurrent, 'YXZ');
+  fusedEuler.x = clamp(fusedEuler.x, THREE.MathUtils.degToRad(-MAX_PITCH_DEG), THREE.MathUtils.degToRad(MAX_PITCH_DEG));
+  fusedEuler.z = clamp(fusedEuler.z, THREE.MathUtils.degToRad(-MAX_ROLL_DEG), THREE.MathUtils.degToRad(MAX_ROLL_DEG));
+  qCurrent.setFromEuler(fusedEuler);
+
+  updateCompass(headingDeg);
+  updateHud();
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Smooth the final render output; do not over-smooth or it becomes laggy.
+  phone.quaternion.slerp(qCurrent, 0.28);
+  renderer.render(scene, camera);
+}
+
+function resetPoseToCurrent() {
+  // Make the current pose the new zero reference without destroying sensor sync.
+  const inv = qCurrent.clone().invert();
+  qCurrent.multiply(inv).normalize();
+  qCurrent.identity();
+}
+
+function setHeadingCenter() {
+  if (lastHeadingDeg == null) return;
+  headingOffsetDeg = wrap360(headingOffsetDeg - lastHeadingDeg);
+}
+
+// -----------------------------
+// Controls
+// -----------------------------
+document.getElementById('centerHeading').addEventListener('click', setHeadingCenter);
+document.getElementById('recenterPose').addEventListener('click', resetPoseToCurrent);
+document.getElementById('toggleNorth').addEventListener('click', (e) => {
+  northLock = !northLock;
+  e.currentTarget.textContent = `NORTH LOCK: ${northLock ? 'ON' : 'OFF'}`;
 });
 
-// ---------------- TESTS ----------------
-// Basic sanity checks to prevent regression
-console.assert(typeof THREE.BoxGeometry === 'function', 'BoxGeometry must exist');
-console.assert(typeof THREE.Mesh === 'function', 'Mesh must exist');
-console.assert(typeof createNotch() !== 'undefined', 'Notch creation must work');
+// -----------------------------
+// Startup / permissions
+// -----------------------------
+async function start() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    const perm = await DeviceOrientationEvent.requestPermission();
+    if (perm !== 'granted') {
+      alert('Motion permission denied.');
+      return;
+    }
+  }
+
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const perm = await DeviceMotionEvent.requestPermission();
+      if (perm !== 'granted') {
+        // continue; orientation alone still works
+      }
+    } catch {}
+  }
+
+  window.addEventListener('deviceorientation', onDeviceOrientation, true);
+  window.addEventListener('devicemotion', onDeviceMotion, true);
+  document.getElementById('overlay').style.display = 'none';
+  started = true;
+  animate();
+}
+
+document.getElementById('start').addEventListener('click', start);
+
+// -----------------------------
+// Resize
+// -----------------------------
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+});
+
+// -----------------------------
+// Tests / sanity checks
+// -----------------------------
+console.assert(typeof THREE.Quaternion === 'function', 'Quaternion exists');
+console.assert(typeof clamp(5, 0, 10) === 'number', 'Clamp helper works');
+console.assert(wrap360(-10) === 350, 'wrap360 should normalize negatives');
+console.assert(shortestAngleDeg(10, 350) === 20, 'shortest angle should wrap correctly');
+console.assert(typeof quaternionFromDeviceEuler === 'function', 'Fusion quaternion function exists');
 
 </script>
 </body>
